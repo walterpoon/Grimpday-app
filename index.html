@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MSaR Grimpday 2026 後勤中心</title>
 
+  <!-- PWA 設定 -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -1192,6 +1198,15 @@
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<GrimpdayApp />);
+  </script>
+
+  <!-- PWA Service Worker 註冊 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(() => console.log('Service Worker registered'))
+        .catch((error) => console.log('Service Worker registration failed:', error));
+    }
   </script>
 </body>
 </html>
