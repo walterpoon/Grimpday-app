@@ -456,7 +456,7 @@
           { id: 'equipment', title: '裝備清單', icon: 'fa-suitcase-rolling', color: 'text-red-600' },
           { id: 'docs', title: '重要文件', icon: 'fa-file-lines', color: 'text-teal-600' },
           { id: 'hotel', title: '酒店資訊', icon: 'fa-building', color: 'text-blue-700' },
-          { id: 'maps', title: '導航資訊', icon: 'fa-map-location-dot', color: 'text-emerald-600' }
+          { id: 'maps', title: '地圖資訊', icon: 'fa-map-location-dot', color: 'text-emerald-600' }
         ];
 
         return (
@@ -637,15 +637,15 @@
                   const googleSearchUrl = `https://www.google.com/search?q=${cleanFlightNo}+flight+status`;
                   return (
                   <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100 relative">
-                    <div className="text-slate-800 text-sm sm:text-base font-bold mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                      <span className="text-base sm:text-lg font-extrabold text-slate-900">{flight.type} | {flight.date}</span>
-                      {flight.status && <span className="text-[#c2410c] bg-orange-50 px-2 py-1 rounded border border-orange-100 text-sm">備註: {flight.status}</span>}
+                    <div className="text-gray-500 text-sm sm:text-base font-bold mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                      <span className="text-base sm:text-lg">{flight.type} | {flight.date}</span>
+                      {flight.status && <span className="text-[#f4511e] bg-orange-50 px-2 py-1 rounded border border-orange-100 text-xs sm:text-sm">備註: {flight.status}</span>}
                     </div>
                     <div className="flex flex-col mb-3 pb-3 border-b border-gray-200">
-                      <a href={googleSearchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-sm hover:border-[#f4511e] hover:bg-[#fff4eb] hover:text-[#c2410c] transition-all">
-                        <span className="text-2xl sm:text-3xl font-black leading-none">{flight.flightNo}</span>
-                        <span className="text-sm sm:text-base font-bold uppercase tracking-[0.18em] text-slate-700 sm:ml-2">點我查航班狀態</span>
-                        <i className="fa-brands fa-google text-lg text-slate-500 sm:ml-auto"></i>
+                      <a href={googleSearchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-gray-800 shadow-sm hover:border-[#f4511e] hover:bg-[#fff4eb] hover:text-[#f4511e] transition-all">
+                        <span className="text-2xl font-black leading-none">{flight.flightNo}</span>
+                        <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500 sm:ml-2">點我查航班狀態</span>
+                        <i className="fa-brands fa-google text-base text-slate-400 sm:ml-auto"></i>
                       </a>
                     </div>
                     <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
@@ -663,9 +663,9 @@
                 const hasRentalDoc = rentalDocUrl !== '#';
 
                 return (
-                <div key={idx} className="bg-white border border-gray-100 shadow-sm rounded-xl p-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                    <span className="text-3xl sm:text-4xl font-black text-slate-900">{car.id}</span>
+                <div key={idx} className="bg-white border border-gray-100 shadow-sm rounded-xl p-5">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-3">
+                    <span className="text-2xl sm:text-3xl font-black text-[#f4511e]">{car.id}</span>
                     <button
                       type="button"
                       onClick={() => hasRentalDoc ? window.open(rentalDocUrl, '_blank', 'noopener,noreferrer') : alert('請在 Google Sheet 的 Cars 分頁填寫租車文件連結')}
@@ -675,11 +675,11 @@
                       租車文件
                     </button>
                   </div>
-                  <div className="text-sm sm:text-base text-gray-500 font-medium mt-1 border-b border-gray-100 pb-2 mb-2">{car.usage}</div>
-                  <div className="flex items-start gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  <div className="text-base sm:text-lg text-gray-500 font-medium mt-1 border-b border-gray-100 pb-3 mb-3">{car.usage}</div>
+                  <div className="flex items-start gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
                     <i className="fa-solid fa-users text-gray-400 mt-0.5 text-base"></i>
                     <div className="flex-1">
-                      <div className="text-sm sm:text-base font-black text-gray-700 break-words">{car.passengers.join(', ')}</div>
+                      <div className="text-base sm:text-lg font-black text-gray-700 break-words">{car.passengers.join(', ')}</div>
                       <div className="text-xs text-gray-400 mt-1">{car.passengers.length} 人</div>
                     </div>
                   </div>
@@ -1062,7 +1062,7 @@
       // ================= 6. 重要文件模組 =================
       const DocsView = () => {
         const getStyleByType = (type) => {
-          const t = String(type || '').toLowerCase();
+          const t = type.toLowerCase();
           if (t === 'file' || t === 'pdf') return { icon: 'fa-file-pdf', color: 'text-red-500', bg: 'bg-red-50' };
           if (t === 'map' || t === 'location') return { icon: 'fa-map-location-dot', color: 'text-green-500', bg: 'bg-green-50' };
           return { icon: 'fa-link', color: 'text-[#1e88e5]', bg: 'bg-blue-50' };
@@ -1159,7 +1159,7 @@
                   <div className="p-5">
                     <div className="flex gap-3 mt-1">
                       <button 
-                        onClick={() => safeUrl !== '#' ? window.open(safeUrl, '_blank', 'noopener,noreferrer') : alert('請在 Google Sheet 中填寫正確的 Share Link')}
+                        onClick={() => safeUrl !== '#' ? window.open(safeUrl, '_blank') : alert('請在 Google Sheet 中填寫正確的 Share Link')}
                         className={`flex-1 rounded-full py-3 px-6 flex items-center justify-center gap-2.5 transition-colors shadow-lg active:scale-95 ${safeUrl !== '#' ? 'bg-gray-900 text-white active:bg-black' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
                         <i className={`fa-solid fa-paper-plane ${safeUrl !== '#' ? 'text-white/70' : ''}`}></i>

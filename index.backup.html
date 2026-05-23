@@ -18,92 +18,6 @@
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       -webkit-tap-highlight-color: transparent;
     }
-
-    .home-clock-card {
-      border-radius: 1.1rem;
-      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.09);
-      border: 1px solid rgba(226, 232, 240, 0.85);
-      overflow: hidden;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-    .clock-face {
-      position: relative;
-      width: min(31vw, 132px);
-      height: min(31vw, 132px);
-      max-width: 132px;
-      max-height: 132px;
-      min-width: 104px;
-      min-height: 104px;
-      border-radius: 9999px;
-      margin: 0 auto;
-      box-shadow: inset 0 0 0 2px rgba(148, 163, 184, 0.18), 0 7px 16px rgba(15, 23, 42, 0.15);
-    }
-    .clock-hand {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform-origin: 50% 100%;
-      border-radius: 9999px;
-    }
-    .clock-hour {
-      width: 5px;
-      height: 28%;
-      margin-left: -2.5px;
-      margin-top: -28%;
-    }
-    .clock-minute {
-      width: 3px;
-      height: 38%;
-      margin-left: -1.5px;
-      margin-top: -38%;
-    }
-    .clock-second {
-      width: 2px;
-      height: 40%;
-      margin-left: -1px;
-      margin-top: -40%;
-    }
-    .clock-dot {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 9px;
-      height: 9px;
-      margin-left: -4.5px;
-      margin-top: -4.5px;
-      border-radius: 9999px;
-      z-index: 8;
-    }
-    .clock-number {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      font-weight: 900;
-      font-size: 0.82rem;
-      line-height: 1;
-      user-select: none;
-    }
-    .clock-tick {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 1px;
-      height: 7px;
-      transform-origin: 50% 0;
-      border-radius: 9999px;
-      opacity: 0.85;
-    }
-    .home-asset-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center;
-      display: block;
-    }
-
   </style>
 </head>
 <body>
@@ -244,340 +158,102 @@
 
       // ================= 1. 首頁模組 =================
       const HomeView = () => {
-        // 圖片設定：把圖片放在 Netlify 發佈目錄內，然後在這裡改路徑即可。
-        // 例如：/assets/msar-logo.png
-        const LOGO_SRC = './assets/msar-logo.png';
-
-        const [weather, setWeather] = useState({
-          temp: '--',
-          high: '--',
-          low: '--',
-          humidity: '--',
-          wind: '--',
-          windText: '',
-          code: null,
-          forecast: [],
-          loading: true
-        });
-        const [now, setNow] = useState(new Date());
+        const [weather, setWeather] = useState({ temp: '--', rain: '--', loading: true });
+        const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, mins: 0 });
 
         useEffect(() => {
-          const timer = setInterval(() => setNow(new Date()), 1000);
+          fetch('https://api.open-meteo.com/v1/forecast?latitude=50.4669&longitude=4.8675&current_weather=true&daily=precipitation_probability_max&timezone=Europe%2FBrussels')
+            .then(res => res.json())
+            .then(data => setWeather({ temp: Math.round(data.current_weather.temperature), rain: data.daily.precipitation_probability_max[0] || 0, loading: false }))
+            .catch(() => setWeather({ temp: '--', rain: '--', loading: false }));
+        }, []);
+
+        useEffect(() => {
+          const targetDate = new Date('2026-06-08T23:55:00+08:00').getTime(); 
+          const updateCountdown = () => {
+            const distance = targetDate - new Date().getTime();
+            if (distance > 0) {
+              setTimeLeft({
+                days: Math.floor(distance / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+                mins: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))
+              });
+            }
+          };
+          updateCountdown();
+          const timer = setInterval(updateCountdown, 60000);
           return () => clearInterval(timer);
         }, []);
 
-        useEffect(() => {
-          fetch('https://api.open-meteo.com/v1/forecast?latitude=50.4669&longitude=4.8675&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min&timezone=Europe%2FBrussels')
-            .then(res => res.json())
-            .then(data => {
-              const current = data.current || {};
-              const daily = data.daily || {};
-              const forecastDays = (daily.time || []).slice(0, 3).map((date, idx) => {
-                const maxValue = (daily.temperature_2m_max || [])[idx];
-                const minValue = (daily.temperature_2m_min || [])[idx];
-                return {
-                  day: getForecastLabel(date),
-                  max: maxValue !== undefined ? Math.round(maxValue) : '--',
-                  min: minValue !== undefined ? Math.round(minValue) : '--'
-                };
-              });
-
-              setWeather({
-                temp: Math.round(current.temperature_2m),
-                high: Math.round((daily.temperature_2m_max || [])[0]),
-                low: Math.round((daily.temperature_2m_min || [])[0]),
-                humidity: Math.round(current.relative_humidity_2m),
-                wind: Math.round(current.wind_speed_10m),
-                windText: getWindDirectionText(current.wind_direction_10m),
-                code: current.weather_code,
-                forecast: forecastDays,
-                loading: false
-              });
-            })
-            .catch(() => setWeather({
-              temp: '--',
-              high: '--',
-              low: '--',
-              humidity: '--',
-              wind: '--',
-              windText: '',
-              code: null,
-              forecast: [],
-              loading: false
-            }));
-        }, []);
-
-        const getTimeParts = (date, timeZone) => {
-          const parts = new Intl.DateTimeFormat('en-GB', {
-            timeZone,
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          }).formatToParts(date).reduce((acc, part) => {
-            acc[part.type] = part.value;
-            return acc;
-          }, {});
-          return {
-            hour: Number(parts.hour || 0),
-            minute: Number(parts.minute || 0),
-            second: Number(parts.second || 0),
-            digital: `${parts.hour}:${parts.minute}:${parts.second}`
-          };
-        };
-
-        const getDateText = (date, timeZone) => new Intl.DateTimeFormat('zh-HK', {
-          timeZone,
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          weekday: 'short'
-        }).format(date);
-
-        const getForecastLabel = (dateString) => new Intl.DateTimeFormat('zh-HK', {
-          weekday: 'short'
-        }).format(new Date(dateString));
-
-        const getWeatherIcon = (code) => {
-          if (code === 0) return { icon: 'fa-sun', iconColor: '#D97706', cardBg: '#FEF3C7', borderColor: '#FDE68A', badgeBg: '#FDE68A' };
-          if ([1, 2].includes(code)) return { icon: 'fa-cloud-sun', iconColor: '#B45309', cardBg: '#FEF3C7', borderColor: '#FDE68A', badgeBg: '#FDE68A' };
-          if (code === 3) return { icon: 'fa-cloud', iconColor: '#334155', cardBg: '#E2E8F0', borderColor: '#CBD5E1', badgeBg: '#E2E8F0' };
-          if ([45, 48].includes(code)) return { icon: 'fa-smog', iconColor: '#475569', cardBg: '#E2E8F0', borderColor: '#CBD5E1', badgeBg: '#E2E8F0' };
-          if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { icon: 'fa-cloud-rain', iconColor: '#2563EB', cardBg: '#DBEAFE', borderColor: '#BFDBFE', badgeBg: '#DBEAFE' };
-          if ([71, 73, 75, 77, 85, 86].includes(code)) return { icon: 'fa-snowflake', iconColor: '#0284C7', cardBg: '#E0F2FE', borderColor: '#BAE6FD', badgeBg: '#E0F2FE' };
-          if ([95, 96, 99].includes(code)) return { icon: 'fa-bolt', iconColor: '#B45309', cardBg: '#FEF3C7', borderColor: '#FDE68A', badgeBg: '#FDE68A' };
-          return { icon: 'fa-cloud-sun', iconColor: '#334155', cardBg: '#E2E8F0', borderColor: '#CBD5E1', badgeBg: '#E2E8F0' };
-        };
-
-        const getWindDirectionText = (degree) => {
-          if (degree === undefined || degree === null || Number.isNaN(Number(degree))) return '';
-          const dirs = ['北風', '東北風', '東風', '東南風', '南風', '西南風', '西風', '西北風'];
-          return dirs[Math.round(Number(degree) / 45) % 8];
-        };
-
-        const getWeatherText = (code) => {
-          if (code === 0) return '晴朗';
-          if ([1, 2].includes(code)) return '多雲間晴';
-          if (code === 3) return '多雲';
-          if ([45, 48].includes(code)) return '有霧';
-          if ([51, 53, 55, 56, 57].includes(code)) return '毛毛雨';
-          if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '有雨';
-          if ([71, 73, 75, 77, 85, 86].includes(code)) return '有雪';
-          if ([95, 96, 99].includes(code)) return '雷暴';
-          return '天氣資料';
-        };
-
-        const hkTime = getTimeParts(now, 'Asia/Hong_Kong');
-        const beTime = getTimeParts(now, 'Europe/Brussels');
-
-        const ClockCard = ({ title, subtitle, flag, time, dateText, dark }) => {
-          const hourAngle = ((time.hour % 12) * 30) + (time.minute * 0.5);
-          const minuteAngle = (time.minute * 6) + (time.second * 0.1);
-          const secondAngle = time.second * 6;
-          const numbers = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-
-          return (
-            <div className={`home-clock-card p-3 ${dark ? 'bg-[#071b31] text-white' : 'bg-[#fbf7ef] text-[#10233c]'}`}>
-              <div className="flex items-center gap-2 mb-2 min-h-[42px]">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xl shadow-md border-2 ${dark ? 'bg-white/10 border-white/20' : 'bg-white border-gray-200'}`}>
-                  {flag}
-                </div>
-                <div className="min-w-0">
-                  <div className={`text-lg font-black leading-tight ${dark ? 'text-white' : 'text-[#10233c]'}`}>{title}</div>
-                  <div className={`text-xs font-semibold ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{subtitle}</div>
-                </div>
-              </div>
-
-              <div className={`clock-face ${dark ? 'bg-[#0b2038]' : 'bg-white'}`}>
-                {[...Array(60)].map((_, i) => {
-                  const angle = (i * 6 - 90) * Math.PI / 180;
-                  const radius = i % 5 === 0 ? 44 : 46;
-                  return (
-                    <span
-                      key={i}
-                      className={`clock-tick ${dark ? 'bg-slate-100' : 'bg-slate-500'}`}
-                      style={{
-                        left: `${50 + Math.cos(angle) * radius}%`,
-                        top: `${50 + Math.sin(angle) * radius}%`,
-                        transform: `translate(-50%, -50%) rotate(${i * 6}deg)`,
-                        height: i % 5 === 0 ? '7px' : '4px',
-                        width: i % 5 === 0 ? '2px' : '1px',
-                        opacity: i % 5 === 0 ? 0.9 : 0.55
-                      }}
-                    />
-                  );
-                })}
-
-                {numbers.map((num, idx) => {
-                  const angle = (idx * 30 - 90) * Math.PI / 180;
-                  const radius = 34;
-                  return (
-                    <span
-                      key={num}
-                      className={`clock-number ${dark ? 'text-white' : 'text-[#10233c]'}`}
-                      style={{
-                        left: `${50 + Math.cos(angle) * radius}%`,
-                        top: `${50 + Math.sin(angle) * radius}%`
-                      }}
-                    >
-                      {num}
-                    </span>
-                  );
-                })}
-
-                <span className={`clock-hand clock-hour ${dark ? 'bg-white' : 'bg-black'}`} style={{ transform: `rotate(${hourAngle}deg)`, zIndex: 5 }} />
-                <span className={`clock-hand clock-minute ${dark ? 'bg-white' : 'bg-black'}`} style={{ transform: `rotate(${minuteAngle}deg)`, zIndex: 6 }} />
-                <span className="clock-hand clock-second bg-red-500" style={{ transform: `rotate(${secondAngle}deg)`, zIndex: 7 }} />
-                <span className={`clock-dot ${dark ? 'bg-white' : 'bg-black'}`} />
-              </div>
-
-              <div className={`text-center mt-2 text-2xl font-black tracking-wider ${dark ? 'text-white' : 'text-[#10233c]'}`}>{time.digital}</div>
-              <div className={`text-center mt-0.5 text-[11px] font-bold ${dark ? 'text-slate-300' : 'text-slate-500'}`}>{dateText}</div>
-            </div>
-          );
-        };
-
-        const MenuButton = ({ id, title, icon, color, onClick }) => (
-          <button
-            type="button"
-            onClick={onClick || (() => setCurrentView(id))}
-            className="bg-white rounded-2xl min-h-[74px] p-2 flex flex-col items-center justify-center gap-1.5 shadow-[0_10px_20px_rgba(15,23,42,0.07)] border border-slate-100 active:scale-95 transition-transform"
-          >
-            <i className={`fa-solid ${icon} text-3xl ${color}`}></i>
-            <span className="text-[14px] font-black text-[#10233c] leading-tight">{title}</span>
-          </button>
-        );
-
         const menuItems = [
-          { id: 'roster', title: '隊員名單', icon: 'fa-user-group', color: 'text-blue-600' },
-          { id: 'transport', title: '航班資料', icon: 'fa-plane', color: 'text-green-600' },
-          { id: 'transport', title: '交通安排', icon: 'fa-car', color: 'text-orange-500' },
-          { id: 'schedule', title: '行程時間表', icon: 'fa-calendar-days', color: 'text-purple-600' },
-          { id: 'equipment', title: '裝備清單', icon: 'fa-suitcase-rolling', color: 'text-red-600' },
-          { id: 'docs', title: '重要文件', icon: 'fa-file-lines', color: 'text-teal-600' },
-          { id: 'hotel', title: '酒店資訊', icon: 'fa-building', color: 'text-blue-700' },
-          { id: 'maps', title: '導航資訊', icon: 'fa-map-location-dot', color: 'text-emerald-600' }
+          { id: 'roster', title: '隊友名單', desc: '隊友資料', icon: 'fa-users', color: 'bg-[#ffb300]' },
+          { id: 'transport', title: '航班及車輛', desc: '航班狀態與租車分配', icon: 'fa-plane', color: 'bg-[#f4511e]' },
+          { id: 'hotel', title: '住宿安排', desc: '住宿地址與房間分配', icon: 'fa-bed', color: 'bg-[#8d6e63]' },
+          { id: 'equipment', title: '器材清單', desc: '個人與團隊裝備檢查', icon: 'fa-wrench', color: 'bg-[#43a047]' },
+          { id: 'schedule', title: '每日行程', desc: '賽程與重要任務提醒', icon: 'fa-calendar-days', color: 'bg-[#00acc1]' },
+          { id: 'docs', title: '大會文件', desc: '大會文件與地圖導航', icon: 'fa-file-lines', color: 'bg-[#1e88e5]' },
         ];
 
         return (
-          <div className="pb-4">
-            <div className="bg-white/95 sticky top-0 z-50 shadow-sm border-b border-slate-200">
-              <div className="px-4 py-2.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-full bg-white border border-slate-200 shadow-sm overflow-hidden shrink-0 flex items-center justify-center">
-                    <img
-                      src={LOGO_SRC}
-                      alt="MSaR logo"
-                      className="w-full h-full object-contain p-1"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement.innerHTML = '<i class="fa-solid fa-mountain text-2xl text-slate-700"></i>';
-                      }}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="text-[22px] leading-6 font-black text-[#080c2b] tracking-tight truncate">MSaR Grimpday 2026</h1>
-                    <div className="text-[20px] leading-6 font-black text-slate-500">後勤中心</div>
-                  </div>
-                </div>
-                <i className="fa-regular fa-bell text-2xl text-slate-500 shrink-0"></i>
-              </div>
-            </div>
-
-            <div className="px-3 pt-3 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
-                <ClockCard
-                  title="香港時間"
-                  subtitle="Hong Kong"
-                  flag="🇭🇰"
-                  time={hkTime}
-                  dateText={getDateText(now, 'Asia/Hong_Kong')}
-                  dark={true}
-                />
-                <ClockCard
-                  title="比利時時間"
-                  subtitle="Brussels"
-                  flag="🇧🇪"
-                  time={beTime}
-                  dateText={getDateText(now, 'Europe/Brussels')}
-                  dark={false}
-                />
-              </div>
-
-              <div className="bg-white rounded-2xl p-3 shadow-[0_12px_28px_rgba(15,23,42,0.08)] border border-slate-100 min-h-[236px]">
-                <div className="flex items-start gap-2">
-                  <div className="w-16 h-14 relative shrink-0 flex items-center justify-center">
-                    <i className="fa-solid fa-sun text-yellow-400 text-3xl absolute top-1 left-2"></i>
-                    <i className="fa-solid fa-cloud text-slate-200 text-4xl absolute bottom-1 left-1 drop-shadow-md"></i>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-black text-[#10233c]">比利時・納慕爾 (Namur)</div>
-                    <div className="mt-1 flex items-end gap-2">
-                      <div className="text-3xl leading-none font-black text-[#10233c]">
-                        {weather.loading ? '--' : weather.temp}°C
-                      </div>
+          <div className="pb-10">
+            <Header title="Grimpday 2026 後勤中心" />
+            <div className="px-4 space-y-6 mt-6">
+              
+              <div className="bg-white rounded-xl p-5 flex flex-col gap-4 shadow-[0_8px_15px_rgba(0,0,0,0.05)] border border-gray-100">
+                <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-4">
+                    {weather.loading ? <i className="fa-solid fa-spinner fa-spin text-3xl text-gray-400"></i> : <i className={`fa-solid ${weather.rain > 50 ? 'fa-cloud-rain text-blue-500' : 'fa-cloud-sun text-yellow-500'} text-4xl`}></i>}
+                    <div>
+                      <div className="text-sm text-gray-500">比利時 Namur</div>
+                      <div className="text-xl font-black text-gray-800 tracking-wide">{weather.temp}°C / 降雨 {weather.rain}%</div>
                     </div>
-                    <div className="text-sm font-bold text-slate-500 mt-1">{weather.loading ? '讀取天氣中' : getWeatherText(weather.code)}</div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-1 mt-3 pt-3 border-t border-slate-100 text-center">
-                  <div className="border-r border-slate-100 px-2 py-1">
-                    <div className="text-sm font-black text-[#10233c]"><i className="fa-solid fa-temperature-half text-slate-500 mr-1"></i>{weather.high}° / {weather.low}°</div>
-                    <div className="text-[11px] font-bold text-slate-500 mt-1">最高 / 最低</div>
+                <div className="flex justify-between items-end pt-1">
+                  <span className="text-gray-600 font-bold">距離香港起飛</span>
+                  <div className="text-right">
+                    <span className="text-3xl font-black text-[#f4511e]">{timeLeft.days}</span><span className="text-sm text-gray-500 mx-1">天</span>
+                    <span className="text-3xl font-black text-[#f4511e]">{timeLeft.hours}</span><span className="text-sm text-gray-500 mx-1">時</span>
+                    <span className="text-3xl font-black text-[#f4511e]">{timeLeft.mins}</span><span className="text-sm text-gray-500 ml-1">分</span>
                   </div>
-                  <div className="border-r border-slate-100 px-2 py-1">
-                    <div className="text-sm font-black text-[#10233c]"><i className="fa-solid fa-droplet text-blue-500 mr-1"></i>{weather.humidity}%</div>
-                    <div className="text-[11px] font-bold text-slate-500 mt-1">濕度</div>
-                  </div>
-                  <div className="px-2 py-1">
-                    <div className="text-sm font-black text-[#10233c]"><i className="fa-solid fa-wind text-slate-500 mr-1"></i>{weather.wind} km/h</div>
-                    <div className="text-[11px] font-bold text-slate-500 mt-1">{weather.windText || '風速'}</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1 mt-2 text-slate-600">
-                  {weather.forecast.map((item, idx) => {
-                    const iconInfo = getWeatherIcon(item.code);
-                    return (
-                      <div
-                        key={idx}
-                        className="rounded-2xl border p-2 flex flex-col items-center gap-1"
-                        style={{ backgroundColor: iconInfo.cardBg, borderColor: iconInfo.borderColor }}
-                      >
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center shadow-sm"
-                          style={{ backgroundColor: iconInfo.badgeBg }}
-                        >
-                          <i
-                            className={`fa-solid ${iconInfo.icon} text-base`}
-                            style={{ color: iconInfo.iconColor }}
-                          ></i>
-                        </div>
-                        <div className="text-[12px] sm:text-sm font-black uppercase tracking-[0.16em] text-slate-600">{item.day}</div>
-                        <div className="text-sm sm:text-base font-black text-[#10233c] leading-tight">{item.max}° / {item.min}°</div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="text-right text-xs font-bold text-slate-500 mt-2">
-                  <i className="fa-solid fa-rotate mr-2"></i>
-                  更新時間：{getDateText(now, 'Europe/Brussels')} {beTime.digital}
                 </div>
               </div>
+
+              {/* 地圖按鈕 */}
+              <button 
+                onClick={() => setCurrentView('maps')} 
+                className="w-full bg-white rounded-xl shadow-[0_8px_15px_rgba(0,0,0,0.05)] border border-gray-100 p-5 flex items-center gap-4 active:scale-95 transition-transform shadow-md"
+              >
+                <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
+                  <i className="fa-solid fa-map-location-dot text-3xl text-[#1e88e5]"></i>
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="text-xl font-black text-gray-800 leading-tight">地圖及導航</h3>
+                  <p className="text-sm font-medium text-gray-400 mt-1">查看比賽場地、飯店及重要地點</p>
+                </div>
+                <i className="fa-solid fa-chevron-right text-gray-300 text-xl shrink-0"></i>
+              </button>
 
               {errorMsg && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-center text-sm font-bold">⚠️ {errorMsg}</div>}
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-4 pt-2">
                 {menuItems.map((item, index) => (
-                  <MenuButton
-                    key={`${item.title}-${index}`}
-                    id={item.id}
-                    title={item.title}
-                    icon={item.icon}
-                    color={item.color}
-                  />
+                  <button 
+                    key={item.id} 
+                    onClick={() => setCurrentView(item.id)} 
+                    className="relative overflow-hidden bg-white rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.06)] flex text-left active:scale-[0.97] transition-transform duration-200 border border-gray-50 min-h-[140px]"
+                  >
+                    <div className="p-4 pr-10 flex-grow flex flex-col justify-center">
+                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center mb-3 border border-gray-100">
+                        <i className={`fa-solid ${item.icon} text-lg text-gray-600`}></i>
+                      </div>
+                      <h3 className="text-[15px] font-black text-gray-800 mb-1 leading-tight tracking-wide">{item.title}</h3>
+                      <p className="text-[11px] font-medium text-gray-400 leading-snug line-clamp-2">{item.desc}</p>
+                    </div>
+                    <div className={`absolute top-0 right-0 bottom-0 w-[35px] flex justify-center pt-4 ${item.color}`}>
+                      <span className="text-white font-bold text-sm">{index + 1}</span>
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -600,8 +276,8 @@
             {appData.roster.map((person, idx) => (
               <div key={idx} className="bg-white rounded-xl p-5 flex flex-col gap-3 shadow-sm border border-gray-100">
                 <div className="flex justify-between items-end border-b border-gray-100 pb-3">
-                  <span className="text-xl font-black text-gray-800">{person.name}</span>
                   <span className="text-[#ffb300] font-bold text-sm bg-yellow-50 px-2 py-1 rounded">{person.role}</span>
+                  <span className="text-xl font-black text-gray-800">{person.name}</span>
                 </div>
                 <div className="flex justify-between items-center gap-3 pt-1">
   <div className="flex items-center gap-2 text-sm bg-gray-50 px-3 py-2 rounded-lg border border-gray-100 text-gray-600 font-medium">
@@ -637,19 +313,19 @@
                   const googleSearchUrl = `https://www.google.com/search?q=${cleanFlightNo}+flight+status`;
                   return (
                   <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100 relative">
-                    <div className="text-slate-800 text-sm sm:text-base font-bold mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                      <span className="text-base sm:text-lg font-extrabold text-slate-900">{flight.type} | {flight.date}</span>
-                      {flight.status && <span className="text-[#c2410c] bg-orange-50 px-2 py-1 rounded border border-orange-100 text-sm">備註: {flight.status}</span>}
+                    <div className="text-gray-500 text-xs font-bold mb-2 flex justify-between items-center">
+                      <span>{flight.type} | {flight.date}</span>
+                      {flight.status && <span className="text-[#f4511e] bg-orange-50 px-2 py-1 rounded border border-orange-100">備註: {flight.status}</span>}
                     </div>
                     <div className="flex flex-col mb-3 pb-3 border-b border-gray-200">
-                      <a href={googleSearchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 shadow-sm hover:border-[#f4511e] hover:bg-[#fff4eb] hover:text-[#c2410c] transition-all">
-                        <span className="text-2xl sm:text-3xl font-black leading-none">{flight.flightNo}</span>
-                        <span className="text-sm sm:text-base font-bold uppercase tracking-[0.18em] text-slate-700 sm:ml-2">點我查航班狀態</span>
-                        <i className="fa-brands fa-google text-lg text-slate-500 sm:ml-auto"></i>
+                      <a href={googleSearchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-2xl font-black text-gray-800 hover:text-[#f4511e] transition-colors">
+                        {flight.flightNo}
+                        <i className="fa-brands fa-google text-sm text-gray-400"></i>
                       </a>
                     </div>
                     <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
-                      <div className="text-base sm:text-lg font-black text-gray-700 leading-relaxed break-words">{flight.passengers.join(', ')}</div>
+                      <div className="text-xs text-gray-400 mb-1 flex items-center gap-1 font-bold"><i className="fa-solid fa-users"></i> 乘客名單：</div>
+                      <div className="text-sm font-bold text-gray-700 leading-relaxed">{flight.passengers.join(', ')}</div>
                     </div>
                   </div>
                 )})}
@@ -663,9 +339,9 @@
                 const hasRentalDoc = rentalDocUrl !== '#';
 
                 return (
-                <div key={idx} className="bg-white border border-gray-100 shadow-sm rounded-xl p-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                    <span className="text-3xl sm:text-4xl font-black text-slate-900">{car.id}</span>
+                <div key={idx} className="bg-white border border-gray-100 shadow-sm rounded-xl p-5">
+                  <div className="flex justify-between items-center mb-2 gap-3">
+                    <span className="text-xl font-black text-[#f4511e]">{car.id}</span>
                     <button
                       type="button"
                       onClick={() => hasRentalDoc ? window.open(rentalDocUrl, '_blank', 'noopener,noreferrer') : alert('請在 Google Sheet 的 Cars 分頁填寫租車文件連結')}
@@ -675,12 +351,12 @@
                       租車文件
                     </button>
                   </div>
-                  <div className="text-sm sm:text-base text-gray-500 font-medium mt-1 border-b border-gray-100 pb-2 mb-2">{car.usage}</div>
-                  <div className="flex items-start gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                    <i className="fa-solid fa-users text-gray-400 mt-0.5 text-base"></i>
-                    <div className="flex-1">
-                      <div className="text-sm sm:text-base font-black text-gray-700 break-words">{car.passengers.join(', ')}</div>
-                      <div className="text-xs text-gray-400 mt-1">{car.passengers.length} 人</div>
+                  <div className="text-sm text-gray-500 font-medium mt-1 border-b border-gray-100 pb-3 mb-3">{car.usage}</div>
+                  <div className="flex items-start gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <i className="fa-solid fa-users text-gray-400 mt-0.5 text-sm"></i>
+                    <div>
+                      <div className="text-xs font-bold text-gray-400 mb-0.5">乘客 ({car.passengers.length}人)：</div>
+                      <div className="text-sm font-bold text-gray-700">{car.passengers.join(', ')}</div>
                     </div>
                   </div>
                 </div>
@@ -1062,7 +738,7 @@
       // ================= 6. 重要文件模組 =================
       const DocsView = () => {
         const getStyleByType = (type) => {
-          const t = String(type || '').toLowerCase();
+          const t = type.toLowerCase();
           if (t === 'file' || t === 'pdf') return { icon: 'fa-file-pdf', color: 'text-red-500', bg: 'bg-red-50' };
           if (t === 'map' || t === 'location') return { icon: 'fa-map-location-dot', color: 'text-green-500', bg: 'bg-green-50' };
           return { icon: 'fa-link', color: 'text-[#1e88e5]', bg: 'bg-blue-50' };
@@ -1159,7 +835,7 @@
                   <div className="p-5">
                     <div className="flex gap-3 mt-1">
                       <button 
-                        onClick={() => safeUrl !== '#' ? window.open(safeUrl, '_blank', 'noopener,noreferrer') : alert('請在 Google Sheet 中填寫正確的 Share Link')}
+                        onClick={() => safeUrl !== '#' ? window.open(safeUrl, '_blank') : alert('請在 Google Sheet 中填寫正確的 Share Link')}
                         className={`flex-1 rounded-full py-3 px-6 flex items-center justify-center gap-2.5 transition-colors shadow-lg active:scale-95 ${safeUrl !== '#' ? 'bg-gray-900 text-white active:bg-black' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
                       >
                         <i className={`fa-solid fa-paper-plane ${safeUrl !== '#' ? 'text-white/70' : ''}`}></i>
