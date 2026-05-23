@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MSaR Grimpday 2026 後勤中心</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      background-color: #eef2f5; 
+      color: #333333; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ==========================================
+    // 🔧 Google Sheets API 設定區 
+    // ==========================================
+     
+
+    const parseBoolean = (val) => {
+      if (!val) return false;
+      return ['true', 'yes', 'y', '1', '是', 'v', 'ok'].includes(String(val).toLowerCase().trim());
+    };
+    const parsePassengers = (val) => val ? String(val).split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    const emptyAppData = () => ({
+      roster: [],
+      flights: [],
+      cars: [],
+      schedule: [],
+      equipment: [],
+      docs: [],
+      hotel: [],
+      maps: []
+    });
+
+    const mockAppData = {
+      ...emptyAppData(),
+      roster: [
+        { role: '領隊', name: '預覽隊員 A', idp: true, luggageCount: '1' },
+        { role: '隊員', name: '預覽隊員 B', idp: false, luggageCount: '2' }
+      ],
+      flights: [
+        {
+          type: '去程',
+          date: '2026-06-08',
+          flightNo: 'MOCK001',
+          status: '本地預覽資料',
+          passengers: ['預覽隊員 A', '預覽隊員 B']
+        }
+      ],
+      schedule: [
+        { day: '08/06/2026', desc: '到步', time: '', location: '', note: '酒店 Chk in' },
+        { day: '09/06/2026', desc: '休息, 適應時差, 裝備分配', time: '', location: '', note: '確認所有器材完整' },
+        { day: '10/06/2026', desc: '報到', time: '0800', location: '大會集合點', note: '報到及取紀念品' },
+        { day: '', desc: '贊助商器材展示', time: '0800-1730', location: '大會集合點', note: '' },
+        { day: '', desc: '開幕典禮', time: '1800', location: '大會集合點', note: '' },
+        { day: '', desc: '領隊會議', time: '1900', location: '大會集合點', note: '' },
+        { day: '', desc: '晚餐', time: '2000', location: '大會集合點', note: '' },
+        { day: '11/06/2026', desc: '到達比賽場地', time: '0730', location: 'Namur', note: '' },
+        { day: '', desc: '第一日比賽 (4個場景)', time: '0800-1800', location: 'Namur', note: '' },
+        { day: '', desc: '晚餐', time: '1930', location: '大會集合點', note: '' },
+        { day: '', desc: '領隊會議', time: '2100', location: '大會集合點', note: '' },
+        { day: '12/06/2026', desc: '到達比賽場地', time: '0730', location: 'Namur', note: '' },
+        { day: '', desc: '第二日比賽 (4個場景)', time: '0800-1800', location: 'Namur', note: '' },
+        { day: '', desc: '晚餐', time: '1930', location: '大會集合點', note: '' },
+        { day: '', desc: '領隊會議', time: '2100', location: '大會集合點', note: '' },
+        { day: '13/06/2026', desc: '到達比賽場地', time: '0730', location: 'Namur', note: '' },
+        { day: '', desc: '第三日比賽 (4個場景)', time: '0800-1800', location: 'Namur', note: '' },
+        { day: '', desc: '晚餐 + Live Band', time: '1900-2200', location: '大會集合點', note: '' }
+      ]
+    };
+
+    const Header = ({ title, onBack }) => (
+      <div className="sticky top-0 z-50 bg-white border-b border-gray-200 p-4 flex items-center shadow-sm">
+        {onBack && (
+          <button onClick={onBack} className="min-h-[44px] min-w-[44px] bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center mr-4 active:bg-gray-100 transition-colors shadow-sm">
+            <i className="fa-solid fa-arrow-left text-gray-600 text-xl"></i>
+          </button>
+        )}
+        <h1 className="text-xl font-bold text-gray-800 flex-1 leading-tight">{title}</h1>
+      </div>
+    );
+
+    function GrimpdayApp() {
+      const [currentView, setCurrentView] = useState('home');
+      const [isLoading, setIsLoading] = useState(true);
+      const [errorMsg, setErrorMsg] = useState(null);
+      const [appData, setAppData] = useState(emptyAppData());
+
+      useEffect(() => { window.scrollTo(0, 0); }, [currentView]);
+
+      useEffect(() => {
+  const fetchSheetData = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
+
+      const isMockMode = new URLSearchParams(window.location.search).get('mock') === '1';
+      if (isMockMode) {
+        setAppData(mockAppData);
+        return;
+      }
+
+      const response = await fetch('/.netlify/functions/sheet-data');
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        const message = errorData?.error || '無法讀取後勤資料，請稍後再試';
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+
+      setAppData({
+        roster: data.roster || [],
+        flights: data.flights || [],
+        cars: data.cars || [],
+        schedule: data.schedule || [],
+        equipment: data.equipment || [],
+        docs: data.docs || [],
+        hotel: data.hotel || [],
+        maps: data.maps || []
+      });
+
+    } catch (err) {
+      setErrorMsg(err.message || '讀取資料時發生錯誤');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchSheetData();
+}, []);
+
+      if (isLoading) {
+        return (
+          <div className="min-h-screen bg-[#eef2f5] text-gray-800 flex flex-col items-center justify-center">
+            <i className="fa-solid fa-spinner fa-spin text-5xl text-gray-400 mb-4"></i>
+            <h2 className="text-xl font-bold">同步指揮中心資料...</h2>
+          </div>
+        );
+      }
+
+      // ================= 1. 首頁模組 =================
+      const HomeView = () => {
+        const [weather, setWeather] = useState({ temp: '--', rain: '--', loading: true });
+        const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, mins: 0 });
+
+        useEffect(() => {
+          fetch('https://api.open-meteo.com/v1/forecast?latitude=50.4669&longitude=4.8675&current_weather=true&daily=precipitation_probability_max&timezone=Europe%2FBrussels')
+            .then(res => res.json())
+            .then(data => setWeather({ temp: Math.round(data.current_weather.temperature), rain: data.daily.precipitation_probability_max[0] || 0, loading: false }))
+            .catch(() => setWeather({ temp: '--', rain: '--', loading: false }));
+        }, []);
+
+        useEffect(() => {
+          const targetDate = new Date('2026-06-08T23:55:00+08:00').getTime(); 
+          const updateCountdown = () => {
+            const distance = targetDate - new Date().getTime();
+            if (distance > 0) {
+              setTimeLeft({
+                days: Math.floor(distance / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+                mins: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))
+              });
+            }
+          };
+          updateCountdown();
+          const timer = setInterval(updateCountdown, 60000);
+          return () => clearInterval(timer);
+        }, []);
+
+        const menuItems = [
+          { id: 'roster', title: '隊友名單', desc: '隊友資料', icon: 'fa-users', color: 'bg-[#ffb300]' },
+          { id: 'transport', title: '航班及車輛', desc: '航班狀態與租車分配', icon: 'fa-plane', color: 'bg-[#f4511e]' },
+          { id: 'hotel', title: '住宿安排', desc: '住宿地址與房間分配', icon: 'fa-bed', color: 'bg-[#8d6e63]' },
+          { id: 'equipment', title: '器材清單', desc: '個人與團隊裝備檢查', icon: 'fa-wrench', color: 'bg-[#43a047]' },
+          { id: 'schedule', title: '每日行程', desc: '賽程與重要任務提醒', icon: 'fa-calendar-days', color: 'bg-[#00acc1]' },
+          { id: 'docs', title: '大會文件', desc: '大會文件與地圖導航', icon: 'fa-file-lines', color: 'bg-[#1e88e5]' },
+        ];
+
+        return (
+          <div className="pb-10">
+            <Header title="Grimpday 2026 後勤中心" />
+            <div className="px-4 space-y-6 mt-6">
+              
+              <div className="bg-white rounded-xl p-5 flex flex-col gap-4 shadow-[0_8px_15px_rgba(0,0,0,0.05)] border border-gray-100">
+                <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-4">
+                    {weather.loading ? <i className="fa-solid fa-spinner fa-spin text-3xl text-gray-400"></i> : <i className={`fa-solid ${weather.rain > 50 ? 'fa-cloud-rain text-blue-500' : 'fa-cloud-sun text-yellow-500'} text-4xl`}></i>}
+                    <div>
+                      <div className="text-sm text-gray-500">比利時 Namur</div>
+                      <div className="text-xl font-black text-gray-800 tracking-wide">{weather.temp}°C / 降雨 {weather.rain}%</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-end pt-1">
+                  <span className="text-gray-600 font-bold">距離香港起飛</span>
+                  <div className="text-right">
+                    <span className="text-3xl font-black text-[#f4511e]">{timeLeft.days}</span><span className="text-sm text-gray-500 mx-1">天</span>
+                    <span className="text-3xl font-black text-[#f4511e]">{timeLeft.hours}</span><span className="text-sm text-gray-500 mx-1">時</span>
+                    <span className="text-3xl font-black text-[#f4511e]">{timeLeft.mins}</span><span className="text-sm text-gray-500 ml-1">分</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 地圖按鈕 */}
+              <button 
+                onClick={() => setCurrentView('maps')} 
+                className="w-full bg-white rounded-xl shadow-[0_8px_15px_rgba(0,0,0,0.05)] border border-gray-100 p-5 flex items-center gap-4 active:scale-95 transition-transform shadow-md"
+              >
+                <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
+                  <i className="fa-solid fa-map-location-dot text-3xl text-[#1e88e5]"></i>
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="text-xl font-black text-gray-800 leading-tight">地圖及導航</h3>
+                  <p className="text-sm font-medium text-gray-400 mt-1">查看比賽場地、飯店及重要地點</p>
+                </div>
+                <i className="fa-solid fa-chevron-right text-gray-300 text-xl shrink-0"></i>
+              </button>
+
+              {errorMsg && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-center text-sm font-bold">⚠️ {errorMsg}</div>}
+
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                {menuItems.map((item, index) => (
+                  <button 
+                    key={item.id} 
+                    onClick={() => setCurrentView(item.id)} 
+                    className="relative overflow-hidden bg-white rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.06)] flex text-left active:scale-[0.97] transition-transform duration-200 border border-gray-50 min-h-[140px]"
+                  >
+                    <div className="p-4 pr-10 flex-grow flex flex-col justify-center">
+                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center mb-3 border border-gray-100">
+                        <i className={`fa-solid ${item.icon} text-lg text-gray-600`}></i>
+                      </div>
+                      <h3 className="text-[15px] font-black text-gray-800 mb-1 leading-tight tracking-wide">{item.title}</h3>
+                      <p className="text-[11px] font-medium text-gray-400 leading-snug line-clamp-2">{item.desc}</p>
+                    </div>
+                    <div className={`absolute top-0 right-0 bottom-0 w-[35px] flex justify-center pt-4 ${item.color}`}>
+                      <span className="text-white font-bold text-sm">{index + 1}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // ================= 2. 團隊名單模組 =================
+      const RosterView = () => (
+        <div className="pb-10">
+          <Header title="👥 隊友名單" onBack={() => setCurrentView('home')} />
+          <div className="px-4 space-y-4 mt-6">
+            <div className="flex justify-between items-center bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3">
+                <i className="fa-solid fa-users text-[#ffb300] text-2xl"></i>
+                <span className="text-lg font-bold text-gray-800">全隊總人數</span>
+              </div>
+              <div className="bg-[#ffb300] text-white px-4 py-1 rounded-lg font-black text-xl shadow-sm">{appData.roster.length} 人</div>
+            </div>
+            {appData.roster.map((person, idx) => (
+              <div key={idx} className="bg-white rounded-xl p-5 flex flex-col gap-3 shadow-sm border border-gray-100">
+                <div className="flex justify-between items-end border-b border-gray-100 pb-3">
+                  <span className="text-[#ffb300] font-bold text-sm bg-yellow-50 px-2 py-1 rounded">{person.role}</span>
+                  <span className="text-xl font-black text-gray-800">{person.name}</span>
+                </div>
+                <div className="flex justify-between items-center gap-3 pt-1">
+  <div className="flex items-center gap-2 text-sm bg-gray-50 px-3 py-2 rounded-lg border border-gray-100 text-gray-600 font-medium">
+    <span>國際車牌:</span>
+    {person.idp ? (
+      <i className="fa-solid fa-circle-check text-[#43a047] text-lg"></i>
+    ) : (
+      <i className="fa-solid fa-circle-xmark text-red-500 text-lg"></i>
+    )}
+  </div>
+
+  <div className="flex items-center gap-2 text-sm bg-orange-50 px-3 py-2 rounded-lg border border-orange-100 text-gray-700 font-bold">
+    <i className="fa-solid fa-suitcase-rolling text-[#f4511e]"></i>
+    <span>23KG 行李: {person.luggageCount || 0}</span>
+  </div>
+</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+      // ================= 3. 航班交通模組 =================
+      const TransportView = () => (
+        <div className="pb-10">
+          <Header title="✈️ 航班及車輛" onBack={() => setCurrentView('home')} />
+          <div className="px-4 space-y-6 mt-6">
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+              <h2 className="text-xl font-black text-[#f4511e] mb-4 flex items-center gap-2"><i className="fa-solid fa-plane"></i> 航班資訊</h2>
+              <div className="space-y-4">
+                {appData.flights.map((flight, idx) => {
+                  const cleanFlightNo = flight.flightNo ? flight.flightNo.replace(/\s+/g, '') : '';
+                  const googleSearchUrl = `https://www.google.com/search?q=${cleanFlightNo}+flight+status`;
+                  return (
+                  <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100 relative">
+                    <div className="text-gray-500 text-xs font-bold mb-2 flex justify-between items-center">
+                      <span>{flight.type} | {flight.date}</span>
+                      {flight.status && <span className="text-[#f4511e] bg-orange-50 px-2 py-1 rounded border border-orange-100">備註: {flight.status}</span>}
+                    </div>
+                    <div className="flex flex-col mb-3 pb-3 border-b border-gray-200">
+                      <a href={googleSearchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-2xl font-black text-gray-800 hover:text-[#f4511e] transition-colors">
+                        {flight.flightNo}
+                        <i className="fa-brands fa-google text-sm text-gray-400"></i>
+                      </a>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                      <div className="text-xs text-gray-400 mb-1 flex items-center gap-1 font-bold"><i className="fa-solid fa-users"></i> 乘客名單：</div>
+                      <div className="text-sm font-bold text-gray-700 leading-relaxed">{flight.passengers.join(', ')}</div>
+                    </div>
+                  </div>
+                )})}
+              </div>
+            </div>
+            
+            <h2 className="text-xl font-black text-gray-800 mt-8 mb-4 px-1">🚗 車輛分配 (共 {appData.cars.length} 部)</h2>
+            <div className="space-y-4">
+              {appData.cars.map((car, idx) => {
+                const rentalDocUrl = (car.rentalDocUrl && String(car.rentalDocUrl).startsWith('http')) ? car.rentalDocUrl : '#';
+                const hasRentalDoc = rentalDocUrl !== '#';
+
+                return (
+                <div key={idx} className="bg-white border border-gray-100 shadow-sm rounded-xl p-5">
+                  <div className="flex justify-between items-center mb-2 gap-3">
+                    <span className="text-xl font-black text-[#f4511e]">{car.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => hasRentalDoc ? window.open(rentalDocUrl, '_blank', 'noopener,noreferrer') : alert('請在 Google Sheet 的 Cars 分頁填寫租車文件連結')}
+                      className={`text-sm px-3 py-2 rounded-lg border flex items-center gap-1 font-black transition-colors active:scale-95 ${hasRentalDoc ? 'bg-orange-50 border-orange-100 text-[#f4511e]' : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'}`}
+                    >
+                      <i className="fa-solid fa-file-lines"></i>
+                      租車文件
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-500 font-medium mt-1 border-b border-gray-100 pb-3 mb-3">{car.usage}</div>
+                  <div className="flex items-start gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <i className="fa-solid fa-users text-gray-400 mt-0.5 text-sm"></i>
+                    <div>
+                      <div className="text-xs font-bold text-gray-400 mb-0.5">乘客 ({car.passengers.length}人)：</div>
+                      <div className="text-sm font-bold text-gray-700">{car.passengers.join(', ')}</div>
+                    </div>
+                  </div>
+                </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      );
+
+      // ================= 4. 每日行程模組 =================
+      const ScheduleView = () => {
+        const scheduleRows = appData.schedule.filter(item =>
+          item.day || item.time || item.location || item.desc || item.note
+        );
+
+        const scheduleDays = scheduleRows.reduce((days, item, rowIndex) => {
+          const hasNewDay = item.day && String(item.day).trim();
+          let currentDay = days[days.length - 1];
+
+          if (hasNewDay || !currentDay) {
+            currentDay = {
+              day: hasNewDay ? String(item.day).trim() : '未定日期',
+              activities: []
+            };
+            days.push(currentDay);
+          }
+
+          if (item.time || item.location || item.desc || item.note) {
+            currentDay.activities.push({
+              time: item.time,
+              location: item.location,
+              desc: item.desc,
+              note: item.note,
+              rowIndex
+            });
+          }
+
+          return days;
+        }, []);
+
+        const getDayText = (dayGroup) => [
+          dayGroup.day,
+          ...dayGroup.activities.map(activity =>
+            `${activity.time || ''} ${activity.location || ''} ${activity.desc || ''} ${activity.note || ''}`
+          )
+        ].join(' ');
+
+        const getScheduleStyle = (dayGroup) => {
+          const text = getDayText(dayGroup);
+          const lowerText = text.toLowerCase();
+
+          if (text.includes('比賽')) {
+            return {
+              label: '比賽日',
+              icon: 'fa-flag-checkered',
+              dot: 'bg-[#00acc1] ring-[#b2ebf2]',
+              badge: 'bg-[#e0f7fa] text-[#007c89] border-[#80deea]',
+              card: 'border-[#80deea] shadow-[0_14px_30px_rgba(0,172,193,0.12)]'
+            };
+          }
+
+          if (text.includes('起飛') || text.includes('航班') || text.includes('抵達') || text.includes('到步') || text.includes('交通')) {
+            return {
+              label: '交通',
+              icon: 'fa-plane-departure',
+              dot: 'bg-[#f4511e] ring-[#ffccbc]',
+              badge: 'bg-[#fff3e0] text-[#bf360c] border-[#ffcc80]',
+              card: 'border-[#ffcc80] shadow-sm'
+            };
+          }
+
+          if (text.includes('報到') || text.includes('準備') || lowerText.includes('briefing')) {
+            return {
+              label: '準備',
+              icon: 'fa-clipboard-check',
+              dot: 'bg-[#43a047] ring-[#c8e6c9]',
+              badge: 'bg-[#e8f5e9] text-[#1b5e20] border-[#a5d6a7]',
+              card: 'border-[#a5d6a7] shadow-sm'
+            };
+          }
+
+          return {
+            label: '行程',
+            icon: 'fa-calendar-day',
+            dot: 'bg-gray-400 ring-gray-200',
+            badge: 'bg-gray-50 text-gray-600 border-gray-200',
+            card: 'border-gray-100 shadow-sm'
+          };
+        };
+
+        const competitionDays = scheduleDays.filter(dayGroup =>
+          getDayText(dayGroup).includes('比賽')
+        ).length;
+        const timedItems = scheduleRows.filter(item => item.time).length;
+        const locatedItems = scheduleRows.filter(item => item.location).length;
+        const totalActivities = scheduleDays.reduce((total, dayGroup) =>
+          total + dayGroup.activities.length, 0
+        );
+
+        return (
+          <div className="pb-10">
+            <Header title="📅 每日行程" onBack={() => setCurrentView('home')} />
+            <div className="px-4 mt-5">
+              <div className="bg-[#003f46] text-white rounded-xl p-4 shadow-[0_10px_24px_rgba(0,63,70,0.16)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-[#9adce4] tracking-wide">GRIMPDAY 2026</div>
+                    <div className="text-2xl font-black mt-1">每日任務時間線</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-3xl font-black leading-none">{scheduleDays.length}</div>
+                    <div className="text-xs font-bold text-[#9adce4] mt-1">日行程</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="bg-white/10 rounded-lg p-3 border border-white/10">
+                    <div className="text-xs text-[#9adce4] font-bold">比賽日</div>
+                    <div className="text-xl font-black mt-1">{competitionDays} 日</div>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3 border border-white/10">
+                    <div className="text-xs text-[#9adce4] font-bold">活動項目</div>
+                    <div className="text-xl font-black mt-1">{totalActivities} 項</div>
+                  </div>
+                </div>
+                <div className="mt-3 text-xs font-bold text-[#9adce4]">
+                  已填時間 {timedItems} 項 / 已填地點 {locatedItems} 項
+                </div>
+              </div>
+
+              {scheduleDays.length === 0 ? (
+                <div className="bg-white rounded-xl p-8 text-center mt-5 border border-gray-100 shadow-sm">
+                  <i className="fa-regular fa-calendar-xmark text-4xl text-gray-300 mb-3"></i>
+                  <div className="text-lg font-black text-gray-700">暫未有行程資料</div>
+                </div>
+              ) : (
+                <div className="relative mt-6 pl-3">
+                  <div className="absolute left-[23px] top-3 bottom-3 w-[3px] bg-[#b2ebf2] rounded-full"></div>
+
+                  <div className="space-y-5">
+                    {scheduleDays.map((dayGroup, idx) => {
+                      const style = getScheduleStyle(dayGroup);
+
+                      return (
+                        <div key={idx} className="relative pl-10">
+                          <div className={`absolute left-0 top-5 w-10 h-10 ${style.dot} rounded-full ring-4 flex items-center justify-center shadow-sm`}>
+                            <i className={`fa-solid ${style.icon} text-white text-sm`}></i>
+                          </div>
+
+                          <div className={`bg-white rounded-xl p-5 border ${style.card}`}>
+                            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-lg font-black text-gray-900 leading-snug break-words">{dayGroup.day}</div>
+                                <div className="text-xs font-bold text-gray-400 mt-1">{dayGroup.activities.length} 項安排</div>
+                              </div>
+                              <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-black ${style.badge}`}>
+                                <i className={`fa-solid ${style.icon}`}></i>
+                                {style.label}
+                              </span>
+                            </div>
+
+                            {dayGroup.activities.length > 0 ? (
+                              <div className="border-t border-gray-100">
+                                {dayGroup.activities.map((activity, activityIdx) => {
+                                  const descLines = String(activity.desc || '')
+                                    .split('\n')
+                                    .map(line => line.trim())
+                                    .filter(Boolean);
+                                  const isLast = activityIdx === dayGroup.activities.length - 1;
+
+                                  return (
+                                    <div key={activity.rowIndex} className={`py-3 ${isLast ? '' : 'border-b border-gray-100'}`}>
+                                      <div className="flex gap-3">
+                                        <div className="w-[86px] shrink-0 text-[13px] font-black text-[#00acc1] leading-6 break-words">
+                                          {activity.time || '時間未定'}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          {descLines.length > 0 ? (
+                                            <div className="space-y-1">
+                                              {descLines.map((line, lineIdx) => (
+                                                <div key={lineIdx} className="flex gap-2 text-base font-bold text-gray-800 leading-6 break-words">
+                                                  <i className="fa-solid fa-circle-check text-[#00acc1] text-xs mt-1.5 shrink-0"></i>
+                                                  <div>{line}</div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <div className="text-base font-bold text-gray-400 leading-6">未填行程內容</div>
+                                          )}
+
+                                          {activity.location && (
+                                            <div className="mt-2 flex items-start gap-2 text-sm font-bold text-gray-600 leading-5">
+                                              <i className="fa-solid fa-location-dot text-[#f4511e] mt-0.5 shrink-0"></i>
+                                              <span className="break-words">{activity.location}</span>
+                                            </div>
+                                          )}
+
+                                          {activity.note && (
+                                            <div className="mt-3 bg-[#fff8e1] border border-[#ffe082] rounded-lg p-3 text-sm font-medium text-gray-700 leading-6 whitespace-pre-line break-words">
+                                              <div className="font-black text-[#8d6e00] mb-1 flex items-center gap-2">
+                                                <i className="fa-solid fa-circle-info"></i>
+                                                備註
+                                              </div>
+                                              <div>{activity.note}</div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="border-t border-gray-100 pt-4 text-sm font-bold text-gray-400">
+                                暫未有當日活動
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      // ================= 5. 器材清單模組 =================
+      const EquipmentView = () => {
+        const [subView, setSubView] = useState('personal'); 
+        const [expandedOwners, setExpandedOwners] = useState({});
+        const [expandedCategories, setExpandedCategories] = useState({});
+        
+        const validEquipment = appData.equipment.filter(eq => eq.item);
+
+        const groupedByOwner = validEquipment.reduce((acc, eq) => {
+          const ownerName = eq.owner || '未分配';
+          if (!acc[ownerName]) acc[ownerName] = [];
+          acc[ownerName].push(eq); return acc;
+        }, {});
+
+        const summaryItemMap = validEquipment.reduce((acc, eq) => {
+          if (!acc[eq.item]) acc[eq.item] = { category: eq.category || '未分類', total: 0, details: [] };
+          acc[eq.item].total += eq.quantity;
+          if(eq.owner && eq.quantity > 0) acc[eq.item].details.push(`${eq.owner}(${eq.quantity})`);
+          return acc;
+        }, {});
+
+        const groupedByCategory = Object.keys(summaryItemMap).reduce((acc, itemName) => {
+          const cat = summaryItemMap[itemName].category;
+          if (!acc[cat]) acc[cat] = [];
+          acc[cat].push({ name: itemName, ...summaryItemMap[itemName] });
+          return acc;
+        }, {});
+
+        const toggleOwner = (owner) => setExpandedOwners(prev => ({ ...prev, [owner]: !prev[owner] }));
+        const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+
+        return (
+          <div className="pb-10">
+            <Header title="📦 器材清單" onBack={() => setCurrentView('home')} />
+            <div className="px-4 space-y-5 mt-6">
+              
+              <div className="flex bg-gray-100 rounded-xl p-1 shadow-inner border border-gray-200">
+                <button onClick={() => setSubView('personal')} className={`flex-1 py-2.5 text-sm font-black rounded-lg transition-colors ${subView === 'personal' ? 'bg-white text-[#43a047] shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>
+                  <i className="fa-solid fa-user-tag mr-1.5"></i> 個人清單
+                </button>
+                <button onClick={() => setSubView('summary')} className={`flex-1 py-2.5 text-sm font-black rounded-lg transition-colors ${subView === 'summary' ? 'bg-white text-[#1e88e5] shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>
+                  <i className="fa-solid fa-layer-group mr-1.5"></i> 全隊總表
+                </button>
+              </div>
+
+              {subView === 'personal' && (
+                <div className="space-y-3"> 
+                  {Object.keys(groupedByOwner).map((owner, idx) => {
+                    const isExpanded = expandedOwners[owner];
+                    return (
+                    <div key={idx} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200 transition-all">
+                      <button onClick={() => toggleOwner(owner)} className="w-full bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center active:bg-gray-100 transition-colors">
+                        <h3 className="text-lg font-black text-gray-800 flex items-center">
+                          <i className="fa-solid fa-user text-[#43a047] mr-2"></i>{owner}
+                        </h3>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold bg-green-50 text-[#43a047] px-2.5 py-1 rounded-full border border-green-200">
+                            共 {groupedByOwner[owner].length} 項
+                          </span>
+                          <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-gray-400 text-xs`}></i>
+                        </div>
+                      </button>
+                      
+                      {isExpanded && (
+                      <div className="p-0 bg-white">
+                        {groupedByOwner[owner].map((eq, eIdx) => (
+                          <div key={eIdx} className="flex flex-col border-b border-gray-100 last:border-0 px-4 py-2.5">
+                            <div className="flex justify-between items-center gap-3">
+                              <div className="flex-1">
+                                <span className="text-[9px] font-bold uppercase text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200 mb-1 inline-block">
+                                  {eq.category || '未分類'}
+                                </span>
+                                <div className="text-sm font-bold text-gray-800 leading-tight">{eq.item}</div>
+                              </div>
+                              <div className="bg-green-50 text-[#43a047] px-3 py-1 rounded-lg font-black text-base border border-green-200 text-center min-w-[36px]">
+                                {eq.quantity}
+                              </div>
+                            </div>
+                            {eq.notes && (
+                              <div className="mt-1.5 text-xs font-bold text-yellow-700 flex items-start gap-1.5 bg-yellow-50 p-1.5 rounded-md border border-yellow-200">
+                                <i className="fa-solid fa-circle-info mt-0.5 text-[10px]"></i>
+                                <span>{eq.notes}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      )}
+                    </div>
+                  )})}
+                </div>
+              )}
+
+              {subView === 'summary' && (
+                <div className="space-y-3">
+                  {Object.keys(groupedByCategory).sort().map((cat, idx) => {
+                    const isExpanded = expandedCategories[cat];
+                    const itemsInCat = groupedByCategory[cat];
+                    
+                    return (
+                    <div key={idx} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200 transition-all">
+                      <button onClick={() => toggleCategory(cat)} className="w-full bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center active:bg-gray-100 transition-colors">
+                        <h3 className="text-lg font-black text-gray-800 flex items-center">
+                          <i className="fa-solid fa-folder-open text-[#1e88e5] mr-2"></i>{cat}
+                        </h3>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold bg-blue-50 text-[#1e88e5] px-2.5 py-1 rounded-full border border-blue-200">
+                            共 {itemsInCat.length} 項
+                          </span>
+                          <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-gray-400 text-xs`}></i>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                      <div className="p-0 bg-white">
+                        {itemsInCat.map((item, iIdx) => (
+                          <div key={iIdx} className="flex flex-col border-b border-gray-100 last:border-0 px-4 py-2.5">
+                            <div className="flex justify-between items-center gap-3">
+                              <div className="flex-1">
+                                <div className="text-sm font-bold text-gray-800 leading-tight">{item.name}</div>
+                              </div>
+                              <div className="bg-blue-50 text-[#1e88e5] px-3 py-1 rounded-lg font-black text-base border border-blue-200 text-center min-w-[36px]">
+                                {item.total}
+                              </div>
+                            </div>
+                            
+                            {item.details.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1 bg-gray-50 p-1.5 rounded-md border border-gray-100">
+                                <span className="text-[9px] font-bold text-gray-400 mt-0.5">分配：</span>
+                                {item.details.map((detail, dIdx) => (
+                                  <span key={dIdx} className="bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
+                                    {detail}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      )}
+                    </div>
+                  )})}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      // ================= 6. 重要文件模組 =================
+      const DocsView = () => {
+        const getStyleByType = (type) => {
+          const t = type.toLowerCase();
+          if (t === 'file' || t === 'pdf') return { icon: 'fa-file-pdf', color: 'text-red-500', bg: 'bg-red-50' };
+          if (t === 'map' || t === 'location') return { icon: 'fa-map-location-dot', color: 'text-green-500', bg: 'bg-green-50' };
+          return { icon: 'fa-link', color: 'text-[#1e88e5]', bg: 'bg-blue-50' };
+        };
+
+        return (
+          <div className="pb-10">
+            <Header title="📂 大會文件" onBack={() => setCurrentView('home')} />
+            <div className="px-4 space-y-4 mt-6">
+              <div className="bg-blue-50 border-l-4 border-[#1e88e5] p-4 rounded-r-xl mb-6 shadow-sm">
+                <p className="text-sm font-bold text-[#1e88e5]">點擊下方按鈕即可直接開啟檔案或啟動地圖導航。</p>
+              </div>
+              {appData.docs.map((doc, idx) => {
+                const style = getStyleByType(doc.type);
+                const safeUrl = (doc.url && doc.url.startsWith('http')) ? doc.url : '#';
+                
+                return (
+                  <a key={idx} href={safeUrl} target="_blank" rel="noopener noreferrer" className="block bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-transform">
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${style.bg}`}>
+                      <i className={`fa-solid ${style.icon} ${style.color} text-2xl`}></i>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-black text-gray-800 mb-0.5 leading-snug">{doc.title}</h3>
+                      {doc.desc && <p className="text-xs font-bold text-gray-400">{doc.desc}</p>}
+                    </div>
+                    <i className="fa-solid fa-chevron-right text-gray-300 text-xl shrink-0"></i>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        );
+      };
+
+      // ================= 7. 住宿分配模組 =================
+      const HotelView = () => (
+        <div className="pb-10">
+          <Header title="🏨 住宿安排" onBack={() => setCurrentView('home')} />
+          <div className="px-4 space-y-6 mt-6">
+            <div className="flex justify-between items-center bg-white border border-gray-200 rounded-xl p-4 mb-2 shadow-sm">
+              <div className="flex items-center gap-3"><i className="fa-solid fa-bed text-[#8d6e63] text-2xl"></i><span className="text-lg font-bold text-gray-800">住宿狀態</span></div>
+              <div className="text-right">
+                <div className="text-[#8d6e63] font-black text-xl">{appData.hotel.length} 間房</div>
+                <div className="text-gray-500 font-bold text-xs mt-0.5">已分配 {appData.hotel.reduce((sum, room) => sum + room.members.length, 0)} 人</div>
+              </div>
+            </div>
+            {appData.hotel.map((room, idx) => (
+              <div key={idx} className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-3 shadow-sm">
+                <div className="flex justify-between items-end border-b border-gray-100 pb-3">
+                  <span className="text-[#8d6e63] text-xl font-black">{room.room.toLowerCase().includes('room') ? room.room : `Room ${room.room}`}</span>
+                  <span className="text-gray-500 font-bold bg-gray-50 px-3 py-1 rounded-lg text-xs border border-gray-200">{room.type}</span>
+                </div>
+                <div className="pt-1">
+                  <div className="flex items-start gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <i className="fa-solid fa-user-group text-gray-400 mt-0.5 text-sm"></i>
+                    <div>
+                      <div className="text-xs font-bold text-gray-400 mb-0.5">入住隊員 ({room.members.length}人)：</div>
+                      <div className="text-lg font-black text-gray-800">{room.members.join(', ')}</div>
+                    </div>
+                  </div>
+                  {room.notes && <div className="text-xs font-bold text-amber-700 mt-2 flex items-start gap-1.5 bg-amber-50 p-2 rounded-lg border border-amber-100"><i className="fa-solid fa-circle-info mt-0.5 text-[10px]"></i><span>{room.notes}</span></div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+      // ================= 🌟 8. 全新：極簡設定版 地圖及導航模組 =================
+      const MapsView = () => {
+        return (
+          <div className="pb-10">
+            <Header title="📂 地圖及導航" onBack={() => setCurrentView('home')} />
+            <div className="px-4 mt-6 space-y-6">
+              
+              <div className="bg-blue-50 border-l-4 border-[#1e88e5] p-4 rounded-r-xl shadow-sm border border-blue-100">
+                <p className="text-sm font-bold text-[#1e88e5]">按下地點卡下方的按鈕，即可開啟 Google Maps 開始導航。</p>
+              </div>
+
+              {/* 地點卡清單 */}
+              {appData.maps.map((place) => {
+                // 防呆：確保 URL 是有效的 http 網址
+                const safeUrl = (place.url && String(place.url).startsWith('http')) ? place.url : '#';
+
+                return (
+                <div key={place.id} className="bg-white rounded-2xl overflow-hidden shadow-[0_10px_25px_rgba(0,0,0,0.06)] border border-gray-100 group transition-all">
+                  
+                  {/* 全新：用高質感漸層色塊取代原本需要經緯度才能生成的靜態地圖 */}
+                  <div className="w-full h-28 bg-gradient-to-br from-[#1e88e5] to-[#00acc1] relative overflow-hidden flex items-center p-5">
+                    <i className="fa-solid fa-map-location-dot text-white/20 text-7xl absolute -right-2 -bottom-4 transform -rotate-12"></i>
+                    <h3 className="text-2xl font-black text-white leading-tight z-10 w-4/5 line-clamp-2 drop-shadow-md">{place.placeName}</h3>
+                  </div>
+
+                  <div className="p-5">
+                    <div className="flex gap-3 mt-1">
+                      <button 
+                        onClick={() => safeUrl !== '#' ? window.open(safeUrl, '_blank') : alert('請在 Google Sheet 中填寫正確的 Share Link')}
+                        className={`flex-1 rounded-full py-3 px-6 flex items-center justify-center gap-2.5 transition-colors shadow-lg active:scale-95 ${safeUrl !== '#' ? 'bg-gray-900 text-white active:bg-black' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                      >
+                        <i className={`fa-solid fa-paper-plane ${safeUrl !== '#' ? 'text-white/70' : ''}`}></i>
+                        <span className="text-sm font-bold uppercase tracking-wider">開始導航</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )})}
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="min-h-screen bg-[#eef2f5] text-gray-800 font-sans selection:bg-[#ffb300] selection:text-white flex justify-center">
+          <div className="w-full max-w-md min-h-screen bg-[#eef2f5] shadow-[0_0_40px_rgba(0,0,0,0.05)] relative">
+            {currentView === 'home' && <HomeView />}
+            {currentView === 'roster' && <RosterView />}
+            {currentView === 'transport' && <TransportView />}
+            {currentView === 'schedule' && <ScheduleView />}
+            {currentView === 'equipment' && <EquipmentView />}
+            {currentView === 'docs' && <DocsView />}
+            {currentView === 'hotel' && <HotelView />}
+            {currentView === 'maps' && <MapsView />}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<GrimpdayApp />);
+  </script>
+</body>
+</html>
