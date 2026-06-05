@@ -924,6 +924,17 @@
         
         const validEquipment = appData.equipment.filter(eq => eq.item);
 
+        const equipmentDoc = appData.docs.find(doc => {
+          const title = String(doc.title || '').toLowerCase();
+          return title.includes('器材') || title.includes('equipment');
+        });
+
+        const getDocStyle = (type) => {
+          const t = String(type || '').toLowerCase();
+          if (t === 'file' || t === 'pdf') return { icon: 'fa-file-pdf', color: 'text-red-500', bg: 'bg-red-50' };
+          return { icon: 'fa-link', color: 'text-[#1e88e5]', bg: 'bg-blue-50' };
+        };
+
         const groupedByOwner = validEquipment.reduce((acc, eq) => {
           const ownerName = eq.owner || '未分配';
           if (!acc[ownerName]) acc[ownerName] = [];
@@ -951,7 +962,27 @@
           <div className="pb-10">
             <Header title="📦 器材清單" onBack={() => setCurrentView('home')} />
             <div className="px-4 space-y-5 mt-6">
-              
+              {equipmentDoc && (
+                <a
+                  href={equipmentDoc.url && equipmentDoc.url.startsWith('http') ? equipmentDoc.url : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-white border border-gray-200 rounded-3xl p-5 shadow-sm transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shrink-0 ${getDocStyle(equipmentDoc.type).bg}`}>
+                      <i className={`fa-solid ${getDocStyle(equipmentDoc.type).icon} ${getDocStyle(equipmentDoc.type).color} text-2xl`}></i>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-base font-black text-gray-900">器材清單 PDF</div>
+                      <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                        {equipmentDoc.desc || '直接開啟 Google Drive 上的最新器材清單。'}
+                      </p>
+                    </div>
+                    <div className="text-gray-300 text-xl mt-1"><i className="fa-solid fa-arrow-up-right-from-square"></i></div>
+                  </div>
+                </a>
+              )}
               <div className="flex bg-gray-100 rounded-xl p-1 shadow-inner border border-gray-200">
                 <button onClick={() => setSubView('personal')} className={`flex-1 py-2.5 text-sm font-black rounded-lg transition-colors ${subView === 'personal' ? 'bg-white text-[#43a047] shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>
                   <i className="fa-solid fa-user-tag mr-1.5"></i> 個人清單
