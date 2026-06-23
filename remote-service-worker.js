@@ -2,7 +2,6 @@ const CACHE_NAME = 'grimpday-shell-v1';
 const CACHE_URLS = [
   '/',
   '/index.html',
-  '/app.js',
   '/manifest.json',
   '/assets/icon-192.png',
   '/assets/icon-512.png'
